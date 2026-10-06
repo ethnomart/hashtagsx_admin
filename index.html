@@ -49,7 +49,7 @@ let token = sessionStorage.getItem('hx_admin') || '';
 let orders = [], filter = 'all', known = new Set(), timer;
 const STATUSES = ['new', 'confirmed', 'shipped', 'delivered', 'cancelled'];
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const money = n => '$' + Number(n).toFixed(2);
+const money = n => 'Rs ' + Math.round(Number(n)).toLocaleString('en-PK');
 
 function loginView(msg) {
   clearInterval(timer);
@@ -102,7 +102,7 @@ function render() {
           '<div class="mute" style="margin-top:6px">' + esc(o.customer.address) + ', ' + esc(o.customer.city) + '</div>' +
           (o.customer.notes ? '<div class="mute" style="margin-top:6px">Note: ' + esc(o.customer.notes) + '</div>' : '') +
         '</div>' +
-        '<div><ul>' + o.items.map(i => '<li>' + esc(i.title) + ' / ' + esc(i.size) + ' x ' + i.quantity +
+        '<div><ul>' + o.items.map(i => '<li>' + esc(i.title) + ' / ' + (i.color ? esc(i.color) + ' / ' : '') + esc(i.size) + ' x ' + i.quantity +
           ' <span class="mute">' + money(i.price * i.quantity) + '</span></li>').join('') + '</ul>' +
           '<div class="total">' + money(o.total) + ' <span class="mute">(shipping ' + money(o.shipping) +
           ', discount ' + money(o.discount) + ') ' + esc(o.payment) + '</span></div></div>' +
