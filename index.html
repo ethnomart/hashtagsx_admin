@@ -46,7 +46,7 @@
 const API = (window.API_URL || '').replace(/\/$/, '');
 const app = document.getElementById('app');
 let token = sessionStorage.getItem('hx_admin') || '';
-let orders = [], filter = 'all', known = new Set(), timer;
+let orders = [], reviews = [], tab = 'orders', filter = 'all', known = new Set(), timer;
 const STATUSES = ['new', 'confirmed', 'shipped', 'delivered', 'cancelled'];
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const money = n => 'Rs ' + Math.round(Number(n)).toLocaleString('en-PK');
@@ -71,6 +71,7 @@ async function load(first) {
   if (r.status === 401) { sessionStorage.removeItem('hx_admin'); return loginView(first ? 'Wrong password' : 'Session expired'); }
   sessionStorage.setItem('hx_admin', token);
   orders = await r.json();
+  try { const rr = await api('/api/admin/reviews'); reviews = rr.ok ? await rr.json() : []; } catch (e) { reviews = []; }
   const fresh = orders.filter(o => !known.has(o.id));
   if (known.size && fresh.length) document.title = '(' + fresh.length + ') New order - HASHTAGSX Admin';
   orders.forEach(o => known.add(o.id));
@@ -84,6 +85,29 @@ async function setStatus(id, status) {
   load();
 }
 window.setStatus = setStatus;
+
+async function setReviewStatus(id, status) {
+  await api('/api/reviews/' + id, { method: 'PATCH', body: JSON.stringify({ status }) });
+  load();
+}
+window.setReviewStatus = setReviewStatus;
+
+function stars(n) { return '\u2605'.repeat(n) + '\u2606'.repeat(5 - n); }
+
+function reviewsView() {
+  const order = { pending: 0, approved: 1, hidden: 2 };
+  const list = reviews.slice().sort((a, b) => order[a.status] - order[b.status]);
+  return list.map(r =>
+    '<div class="order ' + (r.status === 'pending' ? 'new' : '') + '">' +
+      '<div class="top"><span class="id">' + stars(r.rating) + '</span>' +
+        '<span class="mute">' + esc(r.status) + ' &middot; ' + new Date(r.createdAt).toLocaleString() + '</span></div>' +
+      '<p style="margin:10px 0">' + esc(r.comment) + '</p>' +
+      '<div class="mute">' + esc(r.name) + ', ' + esc(r.city) + ' &middot; ' + esc(r.productTitle) + ' &middot; order ' + esc(r.orderId) + '</div>' +
+      '<div style="margin-top:12px;display:flex;gap:8px">' +
+        (r.status !== 'approved' ? '<button onclick="setReviewStatus(' + r.id + ', \'approved\')">Approve</button>' : '') +
+        (r.status !== 'hidden' ? '<button class="ghost" onclick="setReviewStatus(' + r.id + ', \'hidden\')">Hide</button>' : '') +
+      '</div></div>').join('') || '<div class="empty">No reviews yet. Customers can review once their order is marked delivered.</div>';
+}
 
 function render() {
   const revenue = orders.filter(o => o.status !== 'cancelled').reduce((a, o) => a + o.total, 0);
@@ -109,13 +133,17 @@ function render() {
       '</div></div>').join('');
   app.innerHTML =
     '<header><img src="/logo-full.png" alt="HASHTAGSX"><div><span class="mute">Refreshes every 15s</span> <button class="ghost" id="out">Sign out</button></div></header>' +
-    '<main><div class="stats">' +
+    '<main><div class="filters" style="margin-bottom:18px">' +
+      '<button class="' + (tab === 'orders' ? 'on' : '') + '" data-tab="orders">Orders</button>' +
+      '<button class="' + (tab === 'reviews' ? 'on' : '') + '" data-tab="reviews">Reviews' + (reviews.filter(r => r.status === 'pending').length ? ' (' + reviews.filter(r => r.status === 'pending').length + ' new)' : '') + '</button></div>' +
+    (tab === 'reviews' ? reviewsView() : '<div class="stats">' +
       '<div class="stat"><b>' + orders.length + '</b><span>Total orders</span></div>' +
       '<div class="stat"><b>' + orders.filter(o => o.status === 'new').length + '</b><span>New, need action</span></div>' +
       '<div class="stat"><b>' + money(revenue) + '</b><span>Revenue (excl. cancelled)</span></div></div>' +
     '<div class="filters">' + ['all'].concat(STATUSES).map(s => '<button class="' + (filter === s ? 'on' : '') + '" data-f="' + s + '">' + s + '</button>').join('') + '</div>' +
-    (cards || '<div class="empty">No orders here yet.</div>') + '</main>';
+    (cards || '<div class="empty">No orders here yet.</div>')) + '</main>';
   document.getElementById('out').onclick = () => { sessionStorage.removeItem('hx_admin'); token = ''; known.clear(); loginView(); };
+  document.querySelectorAll('[data-tab]').forEach(b => { b.onclick = () => { tab = b.dataset.tab; render(); }; });
   document.querySelectorAll('[data-f]').forEach(b => { b.onclick = () => { filter = b.dataset.f; render(); }; });
 }
 
