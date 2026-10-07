@@ -46,7 +46,7 @@
 const API = (window.API_URL || '').replace(/\/$/, '');
 const app = document.getElementById('app');
 let token = sessionStorage.getItem('hx_admin') || '';
-let orders = [], reviews = [], tab = 'orders', filter = 'all', known = new Set(), timer;
+let orders = [], reviews = [], messages = [], tab = 'orders', filter = 'all', known = new Set(), timer;
 const STATUSES = ['new', 'confirmed', 'shipped', 'delivered', 'cancelled'];
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const money = n => 'Rs ' + Math.round(Number(n)).toLocaleString('en-PK');
@@ -72,6 +72,7 @@ async function load(first) {
   sessionStorage.setItem('hx_admin', token);
   orders = await r.json();
   try { const rr = await api('/api/admin/reviews'); reviews = rr.ok ? await rr.json() : []; } catch (e) { reviews = []; }
+  try { const mr = await api('/api/admin/messages'); messages = mr.ok ? await mr.json() : []; } catch (e) { messages = []; }
   const fresh = orders.filter(o => !known.has(o.id));
   if (known.size && fresh.length) document.title = '(' + fresh.length + ') New order - HASHTAGSX Admin';
   orders.forEach(o => known.add(o.id));
@@ -91,6 +92,30 @@ async function setReviewStatus(id, status) {
   load();
 }
 window.setReviewStatus = setReviewStatus;
+
+async function setMessageStatus(id, status) {
+  await api('/api/messages/' + id, { method: 'PATCH', body: JSON.stringify({ status }) });
+  load();
+}
+window.setMessageStatus = setMessageStatus;
+
+function messagesView() {
+  return messages.map(m =>
+    '<div class="order ' + (m.status === 'new' ? 'new' : '') + '">' +
+      '<div class="top"><span class="id">' + esc(m.name) + '</span>' +
+        '<span class="mute">' + (m.status === 'new' ? 'new' : 'read') + ' &middot; ' + new Date(m.createdAt).toLocaleString() + '</span></div>' +
+      '<p style="margin:10px 0;white-space:pre-wrap">' + esc(m.comment) + '</p>' +
+      '<div class="mute">' +
+        (m.email ? '<a href="mailto:' + esc(m.email) + '">' + esc(m.email) + '</a>' : '') +
+        (m.email && m.phone ? ' &middot; ' : '') +
+        (m.phone ? '<a href="tel:' + esc(m.phone) + '">' + esc(m.phone) + '</a>' : '') +
+      '</div>' +
+      '<div style="margin-top:12px">' +
+        (m.status === 'new'
+          ? '<button onclick="setMessageStatus(' + m.id + ', \'read\')">Mark as read</button>'
+          : '<button class="ghost" onclick="setMessageStatus(' + m.id + ', \'new\')">Mark as new</button>') +
+      '</div></div>').join('') || '<div class="empty">No messages yet. Notes sent from the Contact page appear here.</div>';
+}
 
 function stars(n) { return '\u2605'.repeat(n) + '\u2606'.repeat(5 - n); }
 
@@ -135,8 +160,9 @@ function render() {
     '<header><img src="/logo-full.png" alt="HASHTAGSX"><div><span class="mute">Refreshes every 15s</span> <button class="ghost" id="out">Sign out</button></div></header>' +
     '<main><div class="filters" style="margin-bottom:18px">' +
       '<button class="' + (tab === 'orders' ? 'on' : '') + '" data-tab="orders">Orders</button>' +
-      '<button class="' + (tab === 'reviews' ? 'on' : '') + '" data-tab="reviews">Reviews' + (reviews.filter(r => r.status === 'pending').length ? ' (' + reviews.filter(r => r.status === 'pending').length + ' new)' : '') + '</button></div>' +
-    (tab === 'reviews' ? reviewsView() : '<div class="stats">' +
+      '<button class="' + (tab === 'reviews' ? 'on' : '') + '" data-tab="reviews">Reviews' + (reviews.filter(r => r.status === 'pending').length ? ' (' + reviews.filter(r => r.status === 'pending').length + ' new)' : '') + '</button>' +
+      '<button class="' + (tab === 'messages' ? 'on' : '') + '" data-tab="messages">Messages' + (messages.filter(m => m.status === 'new').length ? ' (' + messages.filter(m => m.status === 'new').length + ' new)' : '') + '</button></div>' +
+    (tab === 'messages' ? messagesView() : tab === 'reviews' ? reviewsView() : '<div class="stats">' +
       '<div class="stat"><b>' + orders.length + '</b><span>Total orders</span></div>' +
       '<div class="stat"><b>' + orders.filter(o => o.status === 'new').length + '</b><span>New, need action</span></div>' +
       '<div class="stat"><b>' + money(revenue) + '</b><span>Revenue (excl. cancelled)</span></div></div>' +
